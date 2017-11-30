@@ -1,0 +1,718 @@
+Quick start notes on the use of Coco/R (Modula-2 version)
+=========================================================
+
+                  Pat Terry, updated Thursday  05-14-98
+                          p.terry@ru.ac.za
+
+These notes apply directly to the WinTel or MS-Dos versions of Coco/R
+(Modula), and also apply very closely to the various Unix versions of Coco/R.
+
+We know that you can't wait to begin!
+
+Installation
+============
+
+Please read the file README.1ST for details of how to install the system.
+
+Getting going
+=============
+
+Examples of input for Coco/R can be found in the case study source files on
+this diskette.  It is suggested that you experiment with these before
+developing your own applications (see further details below).
+
+For each application, the user has to prepare a text file to contain the
+attributed grammar.  Points to be aware of are that
+
+ - it is sensible to work within a "project directory" (say C:\WORK) and not
+   within the "system directory" (C:\COCO);
+
+ - text file preparation must be done with an ASCII editor, and not with a
+   word processor;
+
+ - by convention the file is named with a primary name that is based on the
+   grammar's goal symbol, and with an "ATG" extension, for example CALC.ATG.
+
+Running Coco/R
+==============
+
+When you first start it, Coco/R will respond with something like
+
+       Coco/R (WinTel) - Compiler-Compiler V1.xx
+       Released by Pat Terry ReleaseDate
+
+and prompt you for the name of an input file.  Alternatively, the input file
+name can be entered on the command line.  If no extension is given, the default
+extension ".ATG" is assumed.
+
+          COCOR   TEST.ATG
+
+A second parameter can be supplied to set compiler options, for example:
+
+          COCOR   TEST.ATG   /MCS
+
+or, if you prefer the Unix form
+
+          COCOR   -MCS  TESTATG
+
+For those who need reminding, the command
+
+          COCOR /?  (DOS)  or  COCOR --h  (Unix)
+
+will print a help screen something like the following, and then abort.
+
+     Coco/R (WinTel) - Compiler-Compiler V1.xx
+     Released by Pat Terry ReleaseDate
+     Usage: COCOR [-Options] [Grammar[.atg]] [-Options]
+     Example: COCOR -mcs Test
+
+     Options are
+     a  - Trace automaton
+     c  - Generate compiler module
+     d  - Suppress generation of Definition Modules
+     f  - Give Start and Follower sets
+     g  - Print top-down graph
+     i  - Trace start set computations
+     l  - Force listing
+     m  - (Multipass) Suppress FORWARD declarations
+     n  - Generate symbolic names
+     p  - Generate parser only
+     s  - Print symbol table
+     t  - Grammar tests only - no code generated
+     x  - Print cross reference list
+     COMPILER.FRM, SCANNER.FRM and PARSER.FRM must be in the working directory,
+     or on the path specified by the environment variable CRFRAMES
+
+Input to Coco/R
+===============
+
+Thus, Coco/R takes three (or four) files as input, and produces six (or nine)
+files as output.  These output files can then be combined with a main program
+and any other auxiliary files needed, so as to produce a complete compiler.
+
+The input files needed are
+
+   grammar.ATG  -  an attributed grammar  ("grammar" is used here for
+                   illustration, the file does not have to have that name)
+   PARSER.FRM   -  the frame file for the parser generation
+   SCANNER.FRM  -  the frame file for the scanner generation
+
+optionally
+
+   grammar.FRM  -  an application specific frame file for complete compiler
+                   generation
+
+Frame Files
+===========
+
+Coco/R, like several other parser generators, achieves its results by parsing
+an attributed grammar, and then merging code (based on that grammar) into
+so-called "frame files" that provide skeletons for each of the main components
+of the required compiler - the scanner definition/implementation (or ".h" and
+".c" files in C++ terminology), the parser definition/implementation, and the
+main driver implementation.
+
+A "generic" version of this last frame file is supplied in the distribution as
+
+   COMPILER.FRM  -  the generic frame file for the compiler generation
+
+and this is intended to act as a model for your own applications, a process
+that will be helped by studying various application specific frame files
+supplied in the sources on this diskette.  The other frame files are
+effectively standardized and should require little if any alteration; they are
+fairly resilient, and any particular configuring for specific applications
+will require some experience of the internal workings of Coco/R itself.
+
+There are two supplied scanner frame files.  The generated scanners try to
+achieve efficiency by reading the entire source program into memory, rather
+than making calls to a low level routine every time a character is needed. The
+frame file named SCANNER.FRM handles large source programs, by constructing a
+chained list of blocks of source, allocated from the heap by Storage.ALLOCATE.
+The one named SCANNER2.FRM handles source programs small enough to be read
+into a single block (on an MS-DOS system the limitation is just less than
+64Kb). SCANNER2.FRM produces even more efficient scanners, of course.  To use
+SCANNER2.FRM, it should, of course be renamed SCANNER.FRM.
+
+When using Coco/R, the frame files SCANNER.FRM and PARSER.FRM are first
+searched for in the directory of the input file and then, if they are not
+found, in the directories specified in the environment variable CRFRAMES.  To
+set this variable, use the DOS SET command, for example
+
+            SET CRFRAMES=C:\COCO\FRAMES
+or
+            SET CRFRAMES=C:\COCO\ISOFRAME
+
+(for the difference, see further discussion below)
+
+or the equivalent in Unix, for example
+
+            CRFRAMES=coco/frames
+            export CRFRAMES
+
+You may like to add this to your AUTOEXEC.BAT or .profile file, so that it
+takes effect every time you start your computer.
+
+The frame file for the compiler itself is named as grammar.FRM, where grammar
+is the grammar name.  This is searched for in the directory of the input file.
+If it is not found, a search is made for the generic COMPILER.FRM in this
+directory; failing that, COMPILER.FRM is searched for in the directories
+specified in the environment variable CRFRAMES.  The basic compiler frame file
+(COMPILER.FRM) that comes with the kit will allow simple applications to be
+generated immediately, but it is sensible to copy this basic file to the
+project directory, and then to rename and edit it to suit the application.
+This subject is treated in more detail in the author's textbook:
+
+  Terry, P.D. : Compilers and Compiler Generators - an introduction with C++
+  (ITCP, London, 1997)
+
+which, despite its title, has material pertinent to all versions of Coco/R.
+
+Output from Coco/R
+==================
+
+The generated files are placed in the same directory as the grammar file.
+
+Coco/R for Modula generates the files
+
+  grammarS.DEF+MOD     generated FSA scanner
+  grammarP.DEF+MOD     generated recursive descent parser
+  grammar.ERR          error numbers and corresponding message texts
+  grammar.LST          compilation history
+
+and, optionally, the files
+
+  grammarG.DEF+MOD     generated module exporting symbolic names that
+                       will be used if the $N pragma or /N option was in
+                       effect.
+  grammar.MOD          generated main module for the complete compiler
+
+where grammar is the name of the attributed grammar (this grammar is sensibly
+stored in the file grammar.ATG).
+
+The input/output and miscellaneous module FileIO
+================================================
+
+Although I/O has now effectively been standardized for ISO Modula-2, such
+libraries are not available on many early compilers.  The system supplied here
+attempts to get around this by providing (yet another!) I/O module, called
+FileIO, with a definition module that should be acceptable to any compiler,
+and with implementations for various compilers that differ subtly in various
+places.  This module is of fairly widespread applicability beyond the confines
+of Coco/R; note, however, that in one mode of working, the modules generated
+by Coco/R will assume that the module will be present.
+
+However, there is no longer a need for developers using Coco/R to rely on
+FileIO as the way to handle I/O in the applications that they derive - if the
+ISO libraries provide all the functionality required, then by all means they
+might advantageously be used.  To this end, Coco/R has been modified as from
+version 1.43 to add nothing to the frame files that would be is dependent on
+FileIO itself.  This means that a user can either
+
+(a) make use of the traditional frame files (or rather, subtly updated
+    versions of these as from version 1.43) that result in scanners and
+    parsers being generated that perform I/O entirely through the FileIO
+    interface; or
+
+(b) make use of newly supplied frame files that will result in scanners and
+    parsers being generated that perform I/O through the ISO interfaces; or
+
+(c) if really adventurous, produce a completely new set of frame files that
+    use some completely different I/O library (to do this, one would, of
+    course, have to study the internal workings of Coco/R rather more deeply,
+    but would probably derive frame files rather similar to the ones we have
+    supplied in any case).
+
+We should remark that the frame files are, in any event, non-sacrosanct.
+Those provided in the distribution for the scanner and parser components are,
+in fact, amazingly resilient.  That provided for the main driver routine
+usually has to be tweaked a little, depending on the application; as we have
+observed, various examples of how this is done are also provided in the case
+studies.
+
+Choosing to generate systems for use with FileIO or with the ISO library
+========================================================================
+
+This is easily achieved by defining the CRFRAMES environment variable to point
+to the directory in which the required frame files reside.  The "traditional"
+frame files are supplied in the kit in a subdirectory FRAMES; the new
+ISO-based ones are in the subdirectory ISOFRAME.
+
+Of course, the way in which the attribute grammar is written will also depend
+on the choice of libraries, if the actions associated with productions are
+required to perform I/O, as might happen in many applications.
+
+The FileIO library - overview
+=============================
+
+******************  IMPORTANT NOTE ******************************************
+
+If you do not have an ISO compliant Modula-2 compiler, or if you wish to make
+use of FileIO for maximum ease of porting your applications between other
+compilers, you will need to copy the files from the directory
+SOURCES\CompilerName to your working directory before you can make full use of
+Coco.  Please be careful - look at the sources first, and make sure that you
+do not overwrite valuable files.
+
+*****************************************************************************
+
+FileIO provides the usual services for opening and closing text files, and for
+reading and writing strings, words, whole numbers and line marks to such
+files.  It can also handle binary files, as block read and write operations
+are provided.  In addition there are some utility procedures, for obtaining
+command line parameters and environment strings, and for the output of dates
+and times.  It also has some string handling procedures, so as to overcome the
+fact that the Strings libraries in pre-ISO compilers also tended to differ
+from one commercial system to another.  Finally, it exports various constants
+and types.  These latter may need slight adjustment between compilers.
+
+The module is really rather too large, but has been kept this way to minimize
+the number of non-portable sections and modules in the kit.  It is hoped that
+porting Coco/R to another compiler will require only that the implementation
+of FileIO.mod needs to be reworked, with possibly the definitions of a few
+constants in FileIO.def altered as well.  Not all of the routines in FileIO
+are used by Coco/R itself (although most are).
+
+******************  IMPORTANT NOTE ******************************************
+
+You may wish to extend or modify FileIO to suit your own applications.
+Provided that the types, constants and procedures currently exported are left
+that way, this should cause no problems.
+
+*****************************************************************************
+
+The implementation of FileIO for the JPI compiler is, in many respects, an
+interface onto the JPI FIO module.  Similarly, the implementations for the
+LOG, FST and STO system are, in many respects, interfaces onto the highly
+compatible FileSystem module provided for each of those systems.  The
+implementations for Mocka make use of an interface module to the C library.
+The implementation for the Apple Macintosh p1 compiler, and for the later
+Gardens Point, XDS and StonyBrook compilers is intended to be ISO compliant.
+An alternative implementation for GPM Modula-2 is provided that interfaces
+onto the various traditional file handling libraries available with GPM.
+Users who wish to improve on the performance of Coco/R, and who have access to
+the source code of the libraries for their particular compiler might find the
+modification of FileIO (so as to remove a potentially unnecessary layering of
+procedure calls) a useful and rewarding exercise.  However, licensing
+arrangements for these systems do not permit us to distribute the source code
+of modules like FileSystem and FIO.
+
+It should be noted that FileIO attempts to improve performance by taking
+advantage of such buffering as the underlying implementations allow.  On
+several implementations, FileIO also provides for automatic closing of all
+still open files if a client program terminates without explicitly closing all
+files.  To achieve this in a simple way, FileIO does not allow more than 16
+files (besides the standard ones) to be open at any one time.
+
+The FileIO library has chosen to export 4 standard files, namely
+
+     con    -    assumed to be a non-redirectable "raw" keyboard/screen (like
+                 /dev/tty in Unix terms)
+     StdIn  -    redirectable standard input
+     StdOut -    redirectable standard output
+     err    -    non-redirectable standard error
+
+The con stream is really meant for prompts and responses, and input is not
+meant to be line buffered.  On several implementations, if StdIn has not been
+redirected, input from StdIn becomes synonymous with input from con, and
+similarly unredirected output to StdOut becomes synonymous with output to con.
+
+Unfortunately, the various implementations differ in awkward ways.  On GPM-PC,
+for example, the implementation of con is such that if standard input is
+redirected, input from con will not behave properly.  It is hoped that this
+may be corrected in a later release.
+
+Simple case studies
+===================
+
+Examples of input for Coco/R can be found in the various subdirectories in
+this kit.  It is suggested that you experiment with these before developing
+your own applications.  Besides the grammar for Coco/R itself (which we
+recommend that you do not experiment with initially), there are some other
+applications - one is a cross-reference generator for EBNF productions,
+another is the "Taste" toy compiler described in Moessenboeck's report 127
+from ETH (1990), modified minimally to convert it from Oberon to Modula-2, and
+there is also a Modula-2 pretty printer.  Further case studies can be found in
+the author's textbook, cited earlier, the code for which can be downloaded
+from
+
+      ftp://cs.ru.ac.za/pub/languages/textbook
+
+Supported target systems
+========================
+
+The system should produce code acceptable to any of the following MS-DOS
+pre-ISO Modula-2 compilers:
+
+  JPI    TopSpeed Modula-2   versions 1.17, 2.06 and 3.1
+         TopSpeed is a trademark of Jensen and Partners, International
+
+  FST    Fitted System Tools versions 2.0 through 4.0 (shareware system)
+
+  LOG    Logitech version 3.03
+
+  STO    Stony Brook QuickMod 2.2 (and, presumably the Stony Brook optimizing
+         compiler).  (Stony Brook and QuickMod are trademarks of Gogesch Micro
+         Systems)
+
+  GPMPC  GPM-PC Gardens Point Modula-2 for MS-DOS
+
+Extra GPM-PC documentation is supplied, based on that supplied by John Gough,
+and is available in the file README.GPM.  Note that GPM-PC is not able to
+bootstrap Coco/R itself, due to memory limitations, but it can handle small
+parsers constructed by Coco/R.
+
+The system should also produce acceptable to any of the following ISO
+compliant Modula-2 compilers:
+
+  ISOGPM Gardens Point Modula-2 for Unix machines
+
+  ISOXDS xTech's XDS Modula-2/Oberon compilers for Wintel machines
+
+  ISOMPW the p1/MPW compiler for the Macintosh
+
+  ISOSTO StonyBrook V3 and V4 compilers for Wintel machines
+
+However, take note of the section on compiler directives below, and in
+particular the use of the $M directive or /M command line option.
+
+Compiling the generated compiler
+================================
+
+Once the components of the application have been generated, they are ready to
+be compiled by your Modula-2 compiler.  It is assumed that you are familiar
+with the process of compiling such programs.  Notice, however, that you must
+have installed the FileIO library before you can make use of Coco/R if you do
+not have an ISO compliant compiler.
+
+For a very simple MS-DOS application using the TopSpeed system, one might
+be able to use commands like
+
+          M2 /C CALC /MB+
+          M2 /L CALC
+
+Coco/R options and pragmas
+==========================
+
+As implied above, various didactic output and useful variations may be invoked
+by the use of compiler pragmas in the input grammar, or by the use of a
+command line option.  Compiler pragmas take the form
+
+       $String
+
+and the optional command line parameter takes the form
+
+       /String   or    -String
+
+where String contains one or more of the letters ACDFGLMNPSTX in either upper
+or lower case.
+
+The C D L M N P and T options are generally useful, M in particular
+
+C  - (Compiler) Generate complete compiler driving module, including source
+     listing featuring interleaved error message reporting.  To use this
+     option the file COMPILER.FRM (or grammar.FRM) must be available.
+
+D  - Definition Modules are not written if this option is invoked.  Since
+     these normally need be generated only once, and then become a nuisance if
+     they are regenerated (as all clients have to be recompiled), this option
+     is particularly useful when fine tuning of the attribute grammar is
+     performed, but must obviously be used with care.
+
+L  - (Listing) Force listing.
+     Normally the listing of the grammar is suppressed if the compilation
+     is error free.
+
+M  - (Multipass) Suppress generation of FORWARD declarations.
+     The TopSpeed (one-pass) compilers require FORWARD generations to be
+     added to the generated parser.  Two-pass compilers (like those from FST,
+     Logitech and Stony Brook) usually reject such declarations.  When using
+     Coco/R with these compilers the M option should always be exercised.
+     (alternatively modify and recompile the sources of Coco)).
+
+N  - Generate symbolic names, and the modules grammarG.DEF and grammarG.MOD.
+     Normally the generated scanner and parser use numbers for the symbol
+     classes, but they can optionally use names (like BEGINSym, periodSym)
+     instead.
+
+P  - (Parser only)  Suppress generation of the scanner.
+     Regeneration of the scanner is often tedious, and results in no changes
+     from the one first generated.  This option must be used with care.  It
+     can also be used if a hand-crafted scanner is to be supplied (see the
+     notes on the use of hand-crafted scanners in the file COCOL).
+
+T  - (Tests) Suppress generation of scanner and parser.
+     If this option is exercised, the generation of the scanner and parser
+     is suppressed, but the attributed grammar is parsed and checked for
+     grammatical inconsistencies, LL(1) violations and so on.
+
+The following options are really intended to help with debugging/teaching
+applications.  Their effect may best be seen by judicious experimentation.
+
+A  - Trace automaton
+
+F  - Give First and Follow sets for each non-terminal in the grammar
+
+G  - Print top-down graph
+
+I  - Trace start set computations (very verbose)
+
+S  - Print symbol table
+
+X  - Print cross reference list
+
+Grammar checks
+==============
+
+Coco/R performs several tests to check if the grammar is well-formed.  If one 
+of the following error messages is produced, no compiler parts are generated.
+
+   NO PRODUCTION FOR X
+     The nonterminal X has been used, but there is no production for it.
+
+   X CANNOT BE REACHED
+     There is a production for nonterminal X, but X cannot be derived from the
+     start symbol.
+
+   X CANNOT BE DERIVED TO TERMINALS
+     For example, if there is a production X = "(" X ")" .
+
+   X - Y, Y - X
+     X and Y are nonterminals with circular derivations.
+
+   TOKENS X AND Y CANNOT BE DISTINGUISHED
+     The terminal symbols X and Y are declared to have the same structure,
+     e.g.
+
+       integer = digit { digit } .
+       real = digit { digit } ["." { digit } ].
+
+     In this example, a digit string appears ambiguously to be recognized as
+     an integer or as a real.
+
+The following messages are warnings.  They may indicate an error but they may
+also describe desired effects.  The generated compiler parts may still be
+valid.  If an LL(1) error is reported for a construct X, one must be aware
+that the generated parser will choose the first of several possible
+alternatives for X.
+
+X DELETABLE
+   X can be derived to the empty string, e.g. X = { Y } .
+
+LL(1) ERROR IN X:Y IS START OF MORE THAN ONE ALTERNATIVE
+   Several alternatives in the production of X start with the terminal Y
+   e.g.
+
+      Statement = ident ":=" Expression | ident [ ActualParameters ] .
+ 
+LL(1) ERROR IN X:Y IS START AND SUCCESSOR OF DELETABLE STRUCTURE
+   Deletable structures are [ ... ] and { ... }
+   e.g.
+
+      qualident = [ ident "." ] ident .
+      Statement = "IF" Expression "THEN" Statement [ "ELSE" Statement ] .
+
+   The ELSE at the start of the else part may also be a successor of a
+   statement.  This LL(1) conflict is known under the name "dangling else".
+
+The Parser Interface
+====================
+
+A parser generated by Coco/R for Modula-2 has the following simple interface:
+
+    DEFINITION MODULE grammarP;
+    (* Parser generated by Coco/R *)
+
+    PROCEDURE Parse;
+    (* Parse the source *)
+
+    PROCEDURE Successful(): BOOLEAN;
+    (* Returns TRUE if no errors have been recorded while parsing *)
+
+    PROCEDURE SynError (errNo: INTEGER);
+    (* Report syntax error with specified errNo *)
+
+    PROCEDURE SemError (errNo: INTEGER);
+    (* Report semantic error with specified errNo *)
+
+    PROCEDURE LexString (VAR Lex: ARRAY OF CHAR);
+    (* Retrieves Lex as exact spelling of current token *)
+
+    PROCEDURE LexName (VAR Lex: ARRAY OF CHAR);
+    (* Retrieves Lex as name of current token (capitalized if IGNORE CASE) *)
+
+    PROCEDURE LookAheadString (VAR Lex: ARRAY OF CHAR);
+    (* Retrieves Lex as exact spelling of lookahead token *)
+
+    PROCEDURE LookAheadName (VAR Lex: ARRAY OF CHAR);
+    (* Retrieves Lex as name of lookahead token (capitalized if IGNORE CASE) *)
+
+    END grammarP.
+
+
+The functionality provides for the parser to
+
+ - initiate the parse for the goal symbol by calling Parse().
+ - investigate whether the parse succeeded by calling Successful().
+ - report on the presence of syntactic and semantic errors by calling SynError
+   and SemError.
+ - obtain the lexeme value of a particular token in one of four ways
+   (LexString, LexName, LookAheadString and LookAheadName).  Calls to
+   LexString are most common; the others are used for special variations.
+
+The main program simply has to open the source file and call Parse to start
+the compilation.  A simple main program would thus embroider on the idea:
+
+    FileIO.Open(<Grammar>S.src, sourceName, FALSE);
+    IF FileIO.Okay THEN
+      (* install error handler if required *)
+         <Grammar>S.Error := SomeHandler;
+      (* parse source and check result *)
+         <Grammar>P.Parse;
+         IF <Grammar>S.errors = 0 THEN (* parsed okay *) END
+    END
+
+Note, however, that a tailored frame file can be supplied, from which Coco/R
+can generate a main program if the $C pragma/option is used.  Examples of this
+can be found in the kit as well.
+
+The Scanner Interface
+=====================
+
+The scanner generated by Coco/R has the following interface (for FileIO usage;
+the ISO usage is trivially different in the declaration of the file types):
+
+    DEFINITION MODULE grammarS;
+    (* Scanner generated by Coco/R *)
+
+    IMPORT FileIO;
+
+    TYPE
+      INT32 = FileIO.INT32;
+
+    VAR
+      src,                       (* source/list files *)
+      lst:    FileIO.File;       (* to be opened by the main program *)
+      directory:   ARRAY [0 .. 63] OF CHAR; (* of source file *)
+      line, col:   INTEGER;      (* line and column of current symbol *)
+      len:         CARDINAL;     (* length of current symbol *)
+      pos:         INT32;        (* file position of current symbol *)
+      nextLine:    INTEGER;      (* line of lookahead symbol *)
+      nextCol:     INTEGER;      (* column of lookahead symbol *)
+      nextLen:     CARDINAL;     (* length of lookahead symbol *)
+      nextPos:     INT32;        (* file position of lookahead symbol *)
+      errors:      INTEGER;      (* number of detected errors *)
+      Error:       PROCEDURE     ((* nr *)  INTEGER, (* line *) INTEGER,
+                                  (* col *) INTEGER, (* pos *)  INT32);
+
+    PROCEDURE Get (VAR sym: CARDINAL);
+    (* Gets next symbol from source file *)
+
+    PROCEDURE GetString (pos: INT32; len: CARDINAL; VAR s: ARRAY OF CHAR);
+    (* Retrieves exact string of max length len from position pos in source
+       file *)
+
+    PROCEDURE GetName (pos: INT32; len: CARDINAL; VAR s: ARRAY OF CHAR);
+    (* Retrieves name of symbol of max length len from position pos in source
+       file.  Capitalized if IGNORE CASE was specified *)
+
+    PROCEDURE CharAt (pos: INT32): CHAR;
+    (* Returns character at position pos in source file *)
+
+    PROCEDURE Reset;
+    (* Reads and stores source file internally *)
+
+    END grammarS.
+
+Notes
+-----
+
+It is rarely necessary to make use of any of this interface directly.  The
+parser interface discussed above exports most of the functionality that is
+required when actions are required to retrieve token information.
+
+The variables src, lst and directory are exported from this module simply for
+convenience.  src is assumed to be opened before parsing begins.
+
+The variables line, col, pos, len are apposite for the most recently parsed
+token.
+
+The variables nextLine, nextCol, nextPos, nextLen are apposite for the most
+recently scanned token (the look-ahead token retrieved by the most recent call
+to Get).
+
+PROCEDURE Reset is called by the parser to initialize the scanner.  Note that
+the main module is responsible for opening the source file src prior to
+calling the parser.  Reset reads the entire source into a large internal
+buffer, thus improving the efficiency of the scanner very markedly.
+
+PROCEDURE Get is called repeatedly from the parser, to get the next token from
+the source text.
+
+PROCEDURE CharAt can be used to retrieve a single character from the source
+text at a known position.
+
+PROCEDURE GetName can be used to obtain the text of the token at position pos
+with length len.  PROCEDURE GetString does the same thing, but returns the
+exact string as found in the source.  (GetName returns the string converted to
+uppercase if the scanner was generated so as to IGNORE CASE).
+
+Procedure variable Error is called by the parser for every syntax error
+detected, with an appropriate error number and an error position as
+parameters.  The user can install any procedure that prints a message, or that
+saves the error information for later output, subject to the restraint that
+after parsing is completed, variable  grammarS.errors  should contain a
+count of the total number of errors detected.
+
+Procedure variable Error can also be used to report semantic errors.  If you
+use it for this purpose, make sure that you use semantic error numbers that do
+not clash with automatically generated syntax error numbers (i.e. start
+semantic error numbers at a high number like 200.)
+
+The error numbers together with an explanatory text are written to a file
+grammar.ERR by Coco/R in the following form:
+
+           0: Msg("EOF expected")
+         | 1: Msg("ident expected")
+         | 2: Msg("string expected")
+         | 3: Msg("number expected")
+         ...
+
+This text can then be merged into a CASE statement within a procedure that
+prints textual error messages.  This is done automatically if the $C pragma
+(/C command line option) is used.
+
+Bootstrapping Coco
+==================
+
+The parser and scanner used by Coco/R were themselves generated by a bootstrap
+process; if Coco/R is given the grammar CR.atg as input, it will reproduce the
+files CRS.DEF and MOD and CRP.DEF and MOD.  It can also regenerate its own
+main program from the file SOURCES\CR.FRM and CR.ATG if the $C pragma is used.
+
+This means that Coco/R can be extended and corrected by changing its grammar
+and recompiling itself.  If you feel tempted to do this, please make sure that
+you have kept copies of the original system in case you destroy or corrupt the
+scanner and parser!  GPM-PC is unable to bootstrap Coco/R, due to memory
+limitations.
+
+To bootstrap Coco/R itself you will need to install the FileIO library as
+detailed earlier.
+
+Table size limitations
+======================
+
+The symbol tables used internally by Coco/R make use of fixed length arrays
+- always a rather dangerous thing to do.  The dimensions of these arrays
+have been chosen to ensure that the data segments for the modules will
+remain within the limits imposed by MS-DOS system compilers that typically
+impose a 64K limit on structures.  The limits can be extended for compilers
+that allow this (such as 32 bit compilers) by editing CRT.DEF and CRT.MOD
+appropriately, and recompiling Coco/R.  This may have to be done if a user
+wishes to handle large grammars with many productions, for example.
+
+Trademarks
+==========
+
+Any and all trademarks mentioned above are duly acknowledged.
+
+=END=

@@ -1,0 +1,209 @@
+README.ISO
+==========
+
+This file details the differences between using Coco/R in "traditional"
+mode and in "ISO" mode with Modula-2 compilers.
+
+            Updated Pat Terry, Saturday  03-11-00
+                    p.terry@.ru.ac.za
+
+Historical perspective
+======================
+
+Early development of the Modula version of Coco/R itself was done on PIM
+compliant (or deviant!) compilers, well before the ISO Committee WG13/SC22
+completed the standardization of a language still called Modula-2.  Early
+versions of Modula-2 were plagued by ill-defined and incomplete file
+handling and I/O libraries.  When Coco/R was ported to Modula-2, the
+decision was made to package a set of suitable I/O routines into yet another
+I/O library, called FileIO, which was to provide primitives for opening,
+closing, rewinding (both text and binary files), and would also
+provide routines for reading and writing strings, cardinals and integers,
+and arrays of raw bytes.  As time went on, and Coco/R was ported to be
+immediately useful under various subtly different compilers, other
+non-standardized and non-portable constants, definitions and routines were
+added to the FileIO interface, so that the rest of the source code for
+Coco/R itself essentially became compiler independent.  A good example of
+this is that Coco/R depends on having 32 bit integers available - defined
+as INTEGER on some compilers and LONGINT on others.  By exporting a type
+INT32 from FileIO and having all other components import and use INT32,
+simply altering one line in FileIO means that the rest of the sources could
+be used in the same form on any compiler.  (Astute observers will note that
+the FileIO interface goes beyond what one would normally find in an I/O
+library; this abuse of software engineering principles has been tolerated
+so as to keep the number of non-portable modules to an absolute and easily
+recognized minimum.)
+
+This has proved to work extremely well.  In particular, porting Coco/R to
+each new compiler that was encountered simply became a matter of reworking
+the inner details of FileIO.mod - large sections of which were
+platform/compiler independent in any case).
+
+At the same time, the output produced by Coco/R, that is to say, the
+parsers, scanners and driver programs fortuitously also became compiler
+independent as they could also channel all the difficult aspects through
+the same interface.  In passing, FileIO became a generally useful module in
+many other respects; at the author's University it was used for several
+years for student instruction in preference to libraries such as InOut.
+
+With the emergence of reliable ISO compliant compilers it has become
+possible, in principle, to modify Coco/R to be independent of FileIO.
+However, the ISO library has some shortcomings - for example there are no
+standard libraries with exports for doing often-needed things like deleting
+files, or finding their sizes - and so the sources of Coco/R itself have
+been left, in their latest incarnations, essentially as they have been for
+some time, still acceptable to a number of well-known non-ISO compilers as
+well as to ISO compilers, but still internally dependent on a FileIO
+interface.  Versions of FileIO derived for the various ISO compilers known
+to this author (XDS, StonyBrook, p1 and GPM) are still subtly different
+internally, although, admittedly, being far closer to one another than the
+versions developed for non-ISO compilers.
+
+
+Frame Files
+===========
+
+Coco/R, like several other parser generators, achieves its results by
+parsing an attributed grammar, and then merging code (based on that
+grammar) into so-called "frame files" that provide skeletons for each of
+the main components of the required compiler - the scanner
+definition/implementation (or ".h" and ".c" files in C++ terminology!), the
+parser definition/implementation, and the main driver implementation.
+
+However, there is no need for developers using Coco/R to rely on FileIO
+as the way to handle I/O in the applications that they derive - if the ISO
+libraries provide all the functionality required, then by all means they
+might advantageously be used.  To this end, Coco/R has been modified as
+from version 1.43 to add nothing to the frame files that is dependent on
+FileIO itself.  This means that a user can either
+
+(a) make use of the traditional frame files (or rather, subtly updated
+    versions of these as from version 1.43) that result in scanners and
+    parsers being generated that perform I/O entirely through the FileIO
+    interface; or
+
+(b) make use of newly supplied frame files that will result in scanners and
+    parsers being generated that perform I/O through the ISO interfaces; or
+
+(c) if really adventurous, produce a completely new set of frame files that
+    use some completely different I/O library (to do this, one would, of
+    course, have to study the internal workings of Coco/R rather more
+    deeply, but would probably derive frame files rather similar to the
+    ones we have supplied in any case).
+
+We should remark that the frame files are, in any event, non-sacrosanct.
+Those provided in the distribution for the scanner and parser components
+are, in fact, amazingly resilient.  That provided for the main driver
+routine usually has to be tweaked a little, depending on the application;
+various examples of how this is done are also provided in the case studies,
+and the subject is treated in more detail in the author's textbook:
+
+  Terry, P.D. : Compilers and Compiler Generators - an introduction with C++
+  (ITCP, London, 1997)
+
+This book may now be obtained from, or read on the web, at
+
+  http://www.scifac.ru.ac.za/compilers
+
+Choosing to generate systems for use with FileIO or with the ISO library
+========================================================================
+
+This is easily achieved by defining the CRFRAMES environment variable to
+point to the directory in which the required frame files reside.  The
+"traditional" frame files are supplied in the kit in a subdirectory FRAMES;
+the new ISO-based ones are in the subdirectory ISOFRAME.
+
+Of course, the way in which the attribute grammar is written will also
+depend on the choice of libraries, if the actions associated with
+productions are required to perform I/O, as might happen in many
+applications.
+
+
+Examples
+========
+
+There are various case studies and examples in the kit.  Here is a
+walk-through of how one might derive a system in each of the first two
+ways from one of these examples.  We have assumed throughout that the
+distribution kit has been fully extracted into a directory hierarchy
+emanating from a directory C:\COCO, and the choice of JPI TopSpeed and XDS
+as possible compilers is purely illustrative; other compilers work just as
+well!  What is described here essentially applies to Unix distributions
+(with obvious simple modifications).
+
+(a) Traditional system, using (for example) the JPI TopSpeed compiler
+
+      Make a working directory and log onto it
+
+         MD C:\WORK
+         CD C:\WORK
+
+      Copy a sample application - the Taste package (Traditional version)
+
+         COPY C:\COCO\TASTE\*.*
+
+      Set the CRFRAMES variable to point to the traditional frame set
+
+         SET CRFRAMES=C:\COCO\FRAMES
+
+      Generate the Taste compiler/interpreter 
+
+         C:\COCO\COCOR -c TASTE.ATG
+
+      Copy the FileIO library sources
+
+         COPY C:\COCO\SOURCES\FILEIO.DEF
+         COPY C:\COCO\SOURCES\JPI\FILEIO.*
+
+      Make the Taste Compiler
+
+         C:\JPI\M2 /C TASTE /MB+
+         C:\JPI\M2 /L TASTE
+
+      Run the Taste Compiler
+
+         TASTE TEST.TAS
+
+(a) ISO system, using (for example) the XDS TopSpeed compiler
+
+      Make a working directory and log onto it
+
+         MD C:\WORK
+         CD C:\WORK
+
+      Copy a sample application - the Taste package (ISO version)
+
+         COPY C:\COCO\ISOTASTE\*.*
+
+      Set the CRFRAMES variable to point to the ISO frame set
+
+         SET CRFRAMES=C:\COCO\ISOFRAME
+
+      Generate the Taste compiler/interpreter, just as before
+
+         C:\COCO\COCOR -c TASTE.ATG
+
+      (There is now no need to copy the FileIO library sources)
+
+      Make the Taste Compiler
+
+         C:\XDS\XC =M TASTE
+
+      Run the Taste Compiler
+
+         TASTE TEST.TAS
+
+It must be emphasized that one could have generated sources from the
+"traditional" Taste case study, and then compiled these with the XDS
+compiler, provided that one had also first copied the XDS versions of the
+FileIO module:
+
+         COPY C:\COCO\SOURCES\ISOXDS\FILEIO.*
+
+
+Trademarks
+==========
+
+Any and all trademarks mentioned above are duly acknowledged.
+
+=END=

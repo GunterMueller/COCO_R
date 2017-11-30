@@ -1,0 +1,173 @@
+COMPILER Taste
+
+IMPORT TL, TC;
+
+TYPE
+  Name = ARRAY [0 .. 15] OF CHAR;
+
+PROCEDURE StringToVal (s: ARRAY OF CHAR; VAR val: INTEGER);
+  VAR
+    i, n: INTEGER;
+  BEGIN
+    n := 0; i := 0;
+    WHILE s[i] # 0C DO
+      n := 10 * n + VAL(INTEGER, ORD(s[i]) - ORD("0")); INC(i)
+    END;
+    val := n;
+  END StringToVal;
+
+(*--------------------------------------------------------------------------*)
+
+CHARACTERS
+  letter = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz".
+  digit = "0123456789".
+  cr = CHR(13).
+  lf = CHR(10).
+  tab = CHR(9).
+
+TOKENS
+  ident  = letter {letter | digit}.
+  number = digit {digit}.
+
+IGNORE cr + lf + tab
+
+COMMENTS FROM "(*" TO "*)" NESTED
+
+PRODUCTIONS
+  Taste                                  (. VAR
+                                              name, progName: Name;
+                                              obj: TL.Object; .)
+  = "PROGRAM" Ident<progName> ";"        (. TC.progStart := TC.pc .)
+    Body
+    Ident<name>                          (. IF FileIO.Compare(name, progName) # 0 THEN
+                                              SemError(119)
+                                            END;
+                                            TC.Emit(TC.HALTc) .)
+    ".".
+
+  Body                                   (. VAR
+                                              fix, type: INTEGER;
+                                              name, name1: Name;
+                                              obj: TL.Object; .)
+  =                                      (. TL.EnterScope;
+                                            fix := TC.pc + 1; TC.Emit2(TC.JMP, 0) .)
+    { "VAR"
+      { Ident<name> ":"                  (. obj := TL.NewObj(name, TL.vars) .)
+        TypeId<obj^.type> ";"
+      }
+
+    | "PROCEDURE" Ident<name> ";"        (. obj := TL.NewObj(name, TL.procs);
+                                            obj^.adr := TC.pc .)
+      Body
+      Ident<name1>                       (. TC.Emit(TC.RET);
+                                            IF FileIO.Compare(name, name1) # 0 THEN
+                                              SemError(119)
+                                            END .)
+      ";"
+    }
+    "BEGIN"                              (. TC.Fixup(fix); TC.Emit2(TC.RES, TL.DataSpace()) .)
+    StatSeq
+    "END"                                (. TL.LeaveScope .).
+
+  TypeId<VAR type: INTEGER>
+  =                                      (. type := TL.undef .)
+  (   "INTEGER"                          (. type := TL.int .)
+    | "BOOLEAN"                          (. type := TL.bool .)
+  ).
+
+  Ident<VAR name: Name>
+  = ident                                (. LexName(name) .).
+
+  StatSeq = Stat {";" Stat}.
+
+  Stat                                   (. VAR
+                                              type: INTEGER;
+                                              name: Name;
+                                              obj: TL.Object;
+                                              fix, fix2, loopstart: INTEGER; .)
+  = [ Ident<name>                        (. obj := TL.Obj(name) .)
+      ( ":" "="                          (. IF obj^.kind # TL.vars THEN SemError(123) END .)
+        Expression<type>                 (. IF type # obj^.type THEN SemError(121) END;
+                                            TC.Emit3(TC.STO, TL.curLevel-obj^.level, obj^.adr); .)
+      |                                  (. IF obj^.kind # TL.procs THEN SemError(124) END;
+                                            TC.Emit3(TC.CALL, TL.curLevel-obj^.level, obj^.adr); .)
+      )
+    | "IF" Expression<type>              (. IF type # TL.bool THEN SemError(122) END;
+                                            fix := TC.pc + 1; TC.Emit2(TC.FJMP, 0) .)
+      "THEN" StatSeq
+      [ "ELSE"                           (. fix2 := TC.pc + 1; TC.Emit2(TC.JMP, 0);
+                                            TC.Fixup(fix); fix := fix2 .)
+        StatSeq
+      ]
+      "END"                              (. TC.Fixup(fix) .)
+    | "WHILE"                            (. loopstart := TC.pc .)
+      Expression<type>                   (. IF type # TL.bool THEN SemError(122) END;
+                                            fix := TC.pc + 1; TC.Emit2(TC.FJMP, 0) .)
+      "DO" StatSeq                       (. TC.Emit2(TC.JMP, loopstart); TC.Fixup(fix) .)
+      "END"
+    | "READ" Ident<name>                 (. obj := TL.Obj(name);
+                                            IF obj^.type # TL.int THEN SemError(120) END;
+                                            TC.Emit3(TC.READ, TL.curLevel-obj^.level, obj^.adr) .)
+    | "WRITE" Expression<type>           (. IF type # TL.int THEN SemError(120) END;
+                                            TC.Emit(TC.WRITE) .)
+    ].
+
+  Expression<VAR type: INTEGER>          (. VAR
+                                              type1, op: INTEGER; .)
+  = SimExpr<type>
+    [ RelOp<op> SimExpr<type1>           (. IF (type # type1) THEN SemError(121) END;
+                                            TC.Emit(op); type := TL.bool .)
+      ].
+
+  SimExpr<VAR type: INTEGER>             (. VAR
+                                              type1, op: INTEGER; .)
+  = Term<type>
+    { AddOp<op> Term<type1>              (. IF (type # TL.int) OR (type1 # TL.int) THEN SemError(120) END;
+                                            TC.Emit(op) .)
+      }.
+
+  Term<VAR type: INTEGER>                (. VAR
+                                              type1, op: INTEGER; .)
+  = Factor<type>
+    { MulOp<op> Factor<type1>            (. IF (type # TL.int) OR (type1 # TL.int) THEN SemError(120) END;
+                                            TC.Emit(op) .)
+    }.
+
+  Factor<VAR type: INTEGER>              (. VAR
+                                              val, n: INTEGER;
+                                              obj: TL.Object;
+                                              name: Name; .)
+  = ( Ident<name>                        (. obj := TL.Obj(name); type := obj^.type;
+                                            IF obj^.kind = TL.vars THEN
+                                              TC.Emit3(TC.LOAD, TL.curLevel-obj^.level, obj^.adr)
+                                            ELSE SemError(123)
+                                            END .)
+    | "TRUE"                             (. TC.Emit2(TC.LIT, 1); type := TL.bool .)
+    | "FALSE"                            (. TC.Emit2(TC.LIT, 0); type := TL.bool .)
+    | number                             (. LexName(name);
+                                            StringToVal(name, n);
+                                            TC.Emit2(TC.LIT, n); type := TL.int .)
+    | "-" Factor<type>                   (. IF type # TL.int THEN SemError(120); type := TL.int END;
+                                            TC.Emit(TC.NEG) .)
+    ).
+
+  MulOp<VAR op: INTEGER>
+  =                                      (. op := -1 .)
+    ( "*"                                (. op := TC.MUL .)
+    | "/"                                (. op := TC.DIVI .)
+    ).
+
+  AddOp<VAR op: INTEGER>
+  =                                      (. op := -1 .)
+    ( "+"                                (. op := TC.ADD .)
+    | "-"                                (. op := TC.SUB .)
+    ).
+
+  RelOp<VAR op: INTEGER>
+  =                                      (. op := -1 .)
+    ( "="                                (. op := TC.EQU .)
+    | "<"                                (. op := TC.LSS .)
+    | ">"                                (. op := TC.GTR .)
+    ).
+
+END Taste.

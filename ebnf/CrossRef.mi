@@ -1,0 +1,137 @@
+IMPLEMENTATION MODULE CrossRef;
+(* Create cross reference list of identifiers
+   P.D. Terry, Rhodes University, January 1992
+   Release for use with COCO/R system - uses FileIO *)
+
+  IMPORT Storage, FileIO;
+  IMPORT SYSTEM (* for TSIZE only *);
+
+  CONST
+    NameLength = 24;
+  TYPE
+    TREES  = POINTER TO NODES;
+    TABLES = TREES;
+    QUEUES = POINTER TO REFS;
+    NODES = RECORD
+              Text : ARRAY [0 .. NameLength - 1] OF CHAR;
+              LeftTree,
+              RightTree : TABLES;
+              DefinedBy : CARDINAL;
+              Okay      : BOOLEAN;
+              RefList   : QUEUES;
+            END;
+    REFS = RECORD
+             Number : CARDINAL;
+             Next : QUEUES;
+           END;
+
+  PROCEDURE Create (VAR Table : TABLES);
+    BEGIN
+      Table := NIL;
+    END Create;
+
+  PROCEDURE Add (VAR Table : TABLES; Name : ARRAY OF CHAR;
+                 Reference : CARDINAL; Defined : BOOLEAN);
+
+    PROCEDURE AddToTree (VAR Root : TABLES);
+
+      PROCEDURE NewReference (Leaf : TABLES);
+        VAR
+          Latest : QUEUES;
+        BEGIN
+          WITH Leaf^ DO
+            Storage.ALLOCATE(Latest, SYSTEM.TSIZE(REFS));
+            Latest^.Number := Reference;
+            IF RefList = NIL
+              THEN Latest^.Next := Latest
+              ELSE Latest^.Next := RefList^.Next; RefList^.Next := Latest
+            END;
+            RefList := Latest
+          END
+        END NewReference;
+
+      BEGIN
+        IF Root = NIL
+          THEN (*at a leaf - Name must now be inserted*)
+            Storage.ALLOCATE(Root, SYSTEM.TSIZE(NODES));
+            WITH Root^ DO
+              FileIO.Assign(Name, Text);
+              LeftTree := NIL; RightTree := NIL;
+              Okay := FALSE; RefList := NIL;
+              CASE Defined OF
+                TRUE :
+                  DefinedBy := Reference; Okay := TRUE
+              | FALSE :
+                  DefinedBy := 0; NewReference(Root); Okay := FALSE
+              END
+            END;
+          ELSIF FileIO.Compare(Name, Root^.Text) > 0
+            THEN AddToTree(Root^.RightTree)
+            ELSIF  FileIO.Compare(Name, Root^.Text) < 0
+              THEN AddToTree(Root^.LeftTree)
+            ELSE
+              WITH Root^ DO
+                CASE Defined OF
+                  TRUE :
+                    IF DefinedBy = 0
+                      THEN DefinedBy := Reference; Okay := TRUE;
+                      ELSE Okay := FALSE (*redefined*)
+                    END
+                | FALSE :
+                    IF (RefList = NIL) OR (Reference # RefList^.Number) THEN
+                      NewReference(Root)
+                    END
+                END
+              END
+        END
+      END AddToTree;
+
+    BEGIN
+      AddToTree(Table)
+    END Add;
+
+  PROCEDURE List (Table : TABLES);
+
+    PROCEDURE OneEntry (ThisNode : TABLES);
+      VAR
+        First, Current : QUEUES;
+        I, J, L : CARDINAL;
+      BEGIN
+        WITH ThisNode^ DO
+          I := 0;
+          FileIO.WriteString(output, Text);
+          L := FileIO.SLENGTH(Text);
+          WHILE L <= 16 DO FileIO.Write(output, ' '); INC(L) END;
+          IF ~ Okay
+            THEN FileIO.Write(output, '?')
+            ELSE FileIO.Write(output, ' ')
+          END;
+          FileIO.WriteCard(output, DefinedBy, 4);
+          FileIO.WriteString(output, ' - ');
+          IF RefList # NIL THEN
+            First := RefList^.Next; Current := First;
+            REPEAT
+              FileIO.WriteCard(output, Current^.Number, 4);
+              Current := Current^.Next;
+              INC(I);
+              IF I MOD 12 = 0 THEN
+                FileIO.WriteLn(output);
+                FOR J := 1 TO 20 DO FileIO.Write(output, ' ') END
+              END;
+            UNTIL Current = First (*again*)
+          END;
+          FileIO.WriteLn(output);
+        END
+      END OneEntry;
+
+    BEGIN
+      IF Table # NIL THEN
+        WITH Table^ DO
+          List(LeftTree);
+          OneEntry(Table);
+          List(RightTree)
+        END
+      END
+    END List;
+
+  END CrossRef.

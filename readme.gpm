@@ -1,0 +1,255 @@
+README.GPM
+==========
+
+This is the file README.GPM, which details the differences between
+the gpm versions of COCO/R and other versions.
+
+            Updated Pat Terry, Wednesday  05-13-98
+                    p.terry@ru.ac.za
+
+Based on information last updated 27-Nov-1993 (K John Gough -
+gough@dstc.qut.edu.au).
+
+In what follows "gpm" is an acronym for "Gardens Point Modula-2".
+
+Contents ---
+
+1. Differences from other versions.
+2. Filenames in gpm.
+3. Differences between gpm and gpm-pc versions.
+4. Installing and running cocor on gpm.
+5. How to get gpm compilers 
+
+---------------------------------------------------------------------------
+
+1. DIFFERENCES FROM OTHER VERSIONS.
+
+All gpm compilers, including gpm-pc, are 32-bits or more in word size, and 
+both INTEGER and CARDINAL are of this size.  In keeping with the ISO draft
+standard there are no predefined integer and cardinal types except the
+largest.
+
+
+1.1 LONGINT type.
+
+The latest versions of Coco/R expect the type INT32 to be exported from
+FileIO.def, and that all clients will be written to recognize a 32 bit
+INTEGER type with this name.  To keep source code portable, the use of the
+name INT32 is recommended.  In the case of gpm, the declaration is, of
+course, simply
+
+         TYPE
+           INT32 = INTEGER;
+
+In other implementations one might find
+
+         TYPE
+           INT32 = LONGINT;
+
+
+1.2 FileIO library.
+
+Various versions of this library have been supplied.  Some of these -
+probably the best to use - make use of primitives from the gpm libraries
+UxFiles, StdError, and Terminal.  There is also a version based on ISO I/O
+library primitives.  Take your pick, depending on your version of the
+compiler.
+
+The standard FileIO module exports FileIO.File as an opaque type.  The
+implementation of FileIO.File is, as usual, a pointer to a record, one
+field of which is of UxFiles.File type.  An exported procedure
+FileIO.GetUxFile allows a user to retrieve this field, and so to mix calls
+to UxFiles and FileIO procedures, but this will have to be done with
+caution.  The source code for Coco/R itself makes all I/O calls through
+FileIO procedures.
+
+There are suggested procedures in FileIO which cannot be implemented on top
+of UxFiles, such as FileIO.Delete(file).  The supplied version will give an
+assert error at runtime if you try to do this.  You must instead use
+procedure UxFiles.Delete(fileName).
+
+The FileIO library has chosen to export 4 standard files, namely
+
+     con     assumed to be a non-redirectable "raw" keyboard/screen (like
+             /dev/tty in Unix terms)
+     StdIn   redirectable standard input
+     StdOut  redirectable standard output
+     err     non-redirectable standard error
+
+Unfortunately, the various implementations differ in awkward ways.  On
+gpm-pc, for example, the implementation of con is such that if standard
+input is redirected, input from con will not behave properly.  It is hoped
+that this may be corrected in a later release.
+
+
+1.3  Strings Library.
+
+Gpm-pc provides ISO Modula library "StdStrings" (renamed "Strings" in the
+final WG13 draft).  This library has some procedures with different
+functionality from the traditional Modula Strings library.  FileIO exports
+various string handling procedures used within Coco/R and its generated
+applications, which merely interface onto the StdStrings (or in the ISO
+version, ISO Strings) library equivalents.
+
+
+1.4  Set Computations.
+
+For ease of portability, Coco/RR internally uses 16 bit sets, although gpm
+has 32-bit BITSETs, and supports sets of up to 256 elements.  COCO/R would
+run faster if the larger sets were to be used, but this has not been done
+in this version.  Users may like to experiment by changing the definition
+of FileIO.BitSetSize and bootstrapping the system again.
+
+
+1.5  Command Line Options.
+
+Command line options are in the usual UNIX style even for gpm-pc, that is 
+
+      cocor -options filename
+
+The DOS style options are also supported for compatibility.  It is normal
+to use the following options ---
+
+      cocor -cnm <file>
+
+The Modula is more readable if you use the enumerated types (-n for names) 
+and gpm doesn't need FORWARD declarations (-m for multipass).
+
+
+1.6 The Library StdFiles.
+
+This library supplies some functionality needed for COCO/R which was missing
+from some or all versions of UxFiles.  In particular, UxFiles has no way to
+ask the length of a file.  The COCO/R distribution contains the C source of
+this foreign language library.  In the case of gpm-pc the file stdfiles.obj is
+supplied also, for those who do not have access to turbo-c and masm.
+
+
+2.  FILENAMES IN GPM.
+
+All the Gardens Point tools adopt uniform conventions for filenames by
+opening and closing files based on module names using a library "GpFiles".
+This library has a built in strategy for transforming mixed case module
+names into filenames.  This strategy may be modified by an environment
+variable GPNAMES.  The default is the same as "GPNAMES=lower", and mixed
+case names are obtained by using "GPNAMES=mixed".  The file lookup strategy
+looks first for a file with the selected case conversion, then the opposite
+conversion.  If both fail then a lower-case, DOS-length lookup is tried.
+This enables files copied from DOS to be automatically found.
+
+In any case, by using GpFiles, you may be sure that any files created by gp
+tools will be found by your program.  Some versions of FileIO for GPM
+funnel calls through this library, even when (as for gpm-pc) the procedures
+do almost nothing.  Doing it this way will make sure that your source is
+portable between gpm versions on all operating systems.  If you do not want
+the GpFiles translation in your application, then modify FileIO.Open and
+FileIO.SearchFile to use UxFiles.Open or PathLookup.FindAndOpen directly.
+ 
+
+3.  DIFFERENCES BETWEEN GPM AND GPM-PC VERSIONS.
+
+gpm-pc is a freeware "demonstration" version of gpm.  It is intended, as
+far as possible to reproduce exactly the same outputs as the real gpm
+compilers. Thus we have not attempted to provide facilities which cannot be
+provided for all versions.
+
+The only differences between the gpm and gpm-pc versions of COCO/R are due
+to the different conventions for marking end-of-line in text files, and the
+different conventions for filenames.
+
+gpm-pc has a sharp file-size limit, caused by the particular frontend
+technology which gpm uses.  Frankly it was never designed to work in 640k!
+This means that (i) you cannot bootstrap COCO/R using gpm-pc, so keep the
+executable which is on the distribution; (ii) avoid large .atg files, by
+moving long semantic actions into separate modules.  This is in any case
+good software engineering.
+
+
+4.  INSTALLING AND RUNNING COCO/R ON GPM
+
+4.1 Unix versions.
+
+The various libraries should be compiled and installed on the M2SYM and 
+M2LIB paths respectively.  Set the CRFRAMES variable to point to the
+frame files.  Compile COCO/R with the command "gpmake cr", and then copy
+the resulting executable "cr" onto the path as "cocor".
+
+To compile a trial file, say expr.atg, just use --
+
+         cocor -cnm expr.atg
+         gpmake expr
+
+gpmake will automatically choose the right order of compilation of the defs
+and will not bother to recompile unchanged libraries in the program.  That's 
+all there is to it.  
+
+Of course, you may also compile manually using
+
+         gpm expr*.def expr*.mod
+         build expr
+
+but in this case you may need to order the compilations manually.
+
+
+4.2  Gpm-pc version.
+
+Install as for any other PC version, but make sure that the libraries
+in \cocoNNN\sources\gpmpc are compiled and placed on the M2SYM and M2LIB
+paths.  In the case of StdFiles an object file is supplied. 
+
+Then to run,
+
+         cocor -cnm expr.atg
+         gpmake expr
+
+as for any other version.
+
+
+5.  HOW TO GET GPM.
+
+gpm is a product of the programming languages and systems group at the
+Queensland University of Technology in Australia.
+
+gpm-pc is freeware, and may be obtained from various places.  In particular
+it is available by anonymous ftp from ftp.fit.qut.edu.au (131.181.2.16)
+
+The Linux and FreeBSD native code versions of gpm are available from the same
+site, and may be used freely in academic settings for non-commercial use.
+
+Other versions of gpm are sold commercially.  If you think that COCO/R is
+pretty fast on a pc, you should try it out on a 100 mips unix box.
+
+The gpm version of COCO/R was developed under SVR4.2/i386 (Novell UnixWare)
+and has been thoroughly tested under DECstation/Ultrix, HP-PA/HP-UX (700s 
+and 800s).  It is our experience that gpm programs are 100% portable between
+versions, so almost all 32-bit unix platforms are available.
+
+Send enquiries about gpm to 
+
+        Office of Commercial Services
+        Queenland University of Technology
+        GPO Box 2434
+        Brisbane Q4001
+        AUSTRALIA
+
+or send email requests to
+
+        mboss@fit.qut.edu.au
+
+----------------------------------------------------------------------------
+Just for interest's sake, on the development system (a 16MB 486DX33), cocor
+does a complete bootstrap
+
+              time (cocor -nmc cr; gpmake cr)
+
+in 17.5 seconds elapsed, 6.8 seconds user time.  This is using the 32-bit
+native code gpm unix compiler running with all tests on, and only the 
+default optimisations.
+----------------------------------------------------------------------------
+
+Trademarks
+----------
+
+Any and all trademarks mentioned above are duly acknowledged.
+
+=END=

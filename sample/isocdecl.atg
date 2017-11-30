@@ -1,0 +1,66 @@
+COMPILER Decl
+(* Translate simple C declarations into English
+   Based on Kernighan and Ritchie: "C Programming language", page 122
+   See also: Parr et.al. "PCCTS reference manual", page 53 in ACM SIGPLAN
+   Notices 27(2), 88-165, 1992
+   ISO I/O library required *)
+
+IMPORT SWholeIO, STextIO;
+
+PROCEDURE GetNumber (VAR C : CARDINAL);
+  VAR
+    I : CARDINAL;
+    String : ARRAY [0 .. 20] OF CHAR;
+  BEGIN
+    LexString(String);
+    I := 0; C := 0;
+    WHILE String[I] # 0C DO
+      C := 10 * C + ORD(String[I]) - ORD('0'); INC(I)
+    END;
+  END GetNumber;
+
+VAR
+  Name, Tipe : ARRAY [0 .. 20] OF CHAR;
+  Size : CARDINAL;
+
+CHARACTERS
+  digit =  "0123456789" .
+  letter = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyx_" .
+
+IGNORE CHR(1) .. CHR(31)
+
+TOKENS
+  number = digit { digit } .
+  name = letter { letter } .
+
+PRODUCTIONS
+
+  Decl = { name                          (. LexName(Tipe) .)
+           Dcl                           (. STextIO.WriteChar(' ');
+                                            STextIO.WriteString(Tipe);
+                                            STextIO.WriteLn .)
+           ";" } .
+
+  Dcl =     "*" Dcl                      (. STextIO.WriteString(' pointer to') .)
+           | DirectDcl .
+
+  DirectDcl =   name                     (. LexName(Name);
+                                            STextIO.WriteChar(' ');
+                                            STextIO.WriteString(Name);
+                                            STextIO.WriteString(' is') .)
+                Descriptor
+              | "(" Dcl ")" Descriptor .
+
+  Descriptor = [  "["                    (. STextIO.WriteString(' array ') .)
+                  ( number               (. GetNumber(Size);
+                                            STextIO.WriteChar('[');
+                                            SWholeIO.WriteCard(Size, 1);
+                                            STextIO.WriteString('] ') .)
+                    | (* no dimension *)
+                  )
+                  "]"                    (. STextIO.WriteString('of') .)
+                  Descriptor
+                | "(" ")"                (. STextIO.WriteString(' function returning') .)
+               ] .
+
+END Decl.

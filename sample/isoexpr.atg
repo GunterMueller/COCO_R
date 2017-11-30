@@ -1,0 +1,49 @@
+COMPILER Expr
+(* Simple four-function calculator - ISO library required *)
+
+  IMPORT SWholeIO;
+
+  PROCEDURE GetNumber (VAR Int : INTEGER);
+  (* Convert latest token to integer value Int *)
+    VAR
+      I : CARDINAL;
+      String : ARRAY [0 .. 20] OF CHAR;
+    BEGIN
+      ExprS.GetString(ExprS.pos, ExprS.len, String);
+      I := 0; Int := 0;
+      WHILE String[I] # 0C DO
+        Int := 10 * Int + VAL(INTEGER, ORD(String[I]) - ORD('0')); INC(I)
+      END;
+    END GetNumber;
+
+IGNORE CHR(1) .. CHR(15)
+
+CHARACTERS
+  digit =  "0123456789" .
+
+TOKENS
+  num = digit {digit} .
+
+PRODUCTIONS
+  Expr                              (. VAR r: INTEGER; .)
+    = Expression <r> "="            (. IF Successful() THEN
+                                         SWholeIO.WriteInt(r, 4);
+                                       END .) .
+
+  Expression <VAR e: INTEGER>       (. VAR t: INTEGER; .)
+    = Term <e>
+      {  '+' Term <t>               (. e := e + t .)
+      |  '-' Term <t>               (. e := e - t .)
+      }.
+
+  Term <VAR t: INTEGER>             (. VAR f: INTEGER; .)
+    = Factor <t>
+      {  '*' Factor <f>             (. t := t * f .)
+      |  '/' Factor <f>             (. t := t DIV f .)
+      }.
+
+  Factor <VAR f: INTEGER> =
+         num                        (. GetNumber(f) .)
+    | '(' Expression <f> ')'.
+
+END Expr.

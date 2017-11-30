@@ -1,0 +1,89 @@
+COMPILER Spreadsheet
+(* Toy spreadsheet incorporating simple stack based interpreter
+   P.D. Terry, Rhodes University, 1995 *)
+
+IMPORT Machine, FileIO;
+FROM Machine IMPORT
+  Push, Load, Negate, Add, Subtract, Multiply, Divide, Modulus, Halt;
+VAR
+  Row : Machine.ROWS;
+  Col : Machine.COLUMNS;
+  MustRefresh, Okay : BOOLEAN;
+
+PROCEDURE StrToInt (S : ARRAY OF CHAR; VAR Int : INTEGER);
+  VAR
+    I : INTEGER;
+  BEGIN
+    Int := 0; I := 0;
+    WHILE S[I] # 0C DO
+      Int := 10 * Int + VAL(INTEGER, ORD(S[I]) - ORD("0")); INC(I)
+    END;
+  END StrToInt;
+
+IGNORE CHR(9) .. CHR(13)
+IGNORE CASE
+
+COMMENTS FROM "(*" TO "*)"
+
+CHARACTERS
+  letter     = "ABCDEFGHIJKLMNOPQRSabcdefghijklmnopqrs" .
+  digit      = "0123456789" .
+
+TOKENS
+  identifier = letter .
+  number     = digit { digit} .
+
+PRODUCTIONS
+  Spreadsheet =                                 (. Row := 1; Col := 1 .)
+                { Command } "QUIT"              (. Machine.GotoXY(0, 23) .).
+
+  Command     =                                 (. MustRefresh := FALSE .)
+                [                               (. Machine.InitializeCode(Row, Col) .)
+                  Expression                    (. Machine.AddCode(Row, Col, Halt);
+                                                   Machine.Evaluate(Row, Col, Okay);
+                                                   MustRefresh := TRUE; .)
+                ]
+                (   "UP"                        (. IF Row > 1 THEN DEC(Row) END .)
+                  | "DOWN"                      (. IF Row < Machine.MaxRows THEN INC(Row) END .)
+                  | "LEFT"                      (. IF Col > 1 THEN DEC(Col) END .)
+                  | "RIGHT"                     (. IF Col < Machine.MaxCols THEN INC(Col) END .)
+                  | "HOME"                      (. Row := 1; Col := 1 .)
+                  | "GOTO" Cell<Row, Col>
+                  | "ENTER"
+                 )                              (. IF MustRefresh THEN Machine.Refresh END;
+                                                   FileIO.ReadLn(FileIO.con) .) .
+
+  Expression  = ( [ "+" ] Term
+                  | "-" Term                    (. Machine.AddCode(Row, Col, Negate) .)
+                )
+                {   "+" Term                    (. Machine.AddCode(Row, Col, Add) .)
+                  | "-" Term                    (. Machine.AddCode(Row, Col, Subtract) .)
+                } .
+
+  Term        = Factor
+                {   "*" Factor                  (. Machine.AddCode(Row, Col, Multiply) .)
+                  | "/" Factor                  (. Machine.AddCode(Row, Col, Divide) .)
+                  | "%" Factor                  (. Machine.AddCode(Row, Col, Modulus) .)
+                } .
+
+  Factor          (. VAR
+                       R : Machine.ROWS;
+                       C : Machine.COLUMNS;
+                       String : ARRAY [0 .. 100] OF CHAR;
+                       Int : INTEGER;
+                   .)
+
+               =  number                        (. LexName(String);
+                                                   StrToInt(String, Int);
+                                                   Machine.AddCode(Row, Col, Push);
+                                                   Machine.AddCode(Row, Col, Int) .)
+                | Cell<R, C>                    (. Machine.AddCode(Row, Col, Load);
+                                                   Machine.AddCode(Row, Col, R);
+                                                   Machine.AddCode(Row, Col, C) .)
+                | "(" Expression ")" .
+
+  Cell <VAR Row : Machine.ROWS; VAR Col : Machine.COLUMNS>
+              = identifier                      (. Row := ORD(CAP(SpreadsS.CharAt(SpreadsS.pos))) - ORD('A') + 1 .)
+                number                          (. Col := ORD(SpreadsS.CharAt(SpreadsS.pos)) - ORD('0') .) .
+
+END Spreadsheet.

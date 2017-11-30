@@ -1,0 +1,481 @@
+$LSC (*$ACFGILMOSXN*)
+(* COCO/R for MS-DOS grammar used to generate COCO/R itself
+   as adapted by P.D. Terry, January 1992
+   version 1.50 last modified Sat  11-13-99 *)
+
+COMPILER CR
+
+(*---------------------- semantic declarations -----------------------*)
+
+IMPORT CRT, CRA, Sets;
+
+CONST
+  ident = 0; string = 1;  (* symbol kind *)
+TYPE
+  INT32 = FileIO.INT32;
+
+PROCEDURE FixString (VAR name: ARRAY OF CHAR; len: CARDINAL);
+  VAR
+    double, spaces: BOOLEAN;
+    i: CARDINAL;
+  BEGIN
+    IF len = 2 THEN SemError(129); RETURN END;
+    IF CRT.ignoreCase THEN (* force uppercase *)
+      FOR i := 1 TO len - 2 DO name[i] := CAP(name[i]) END
+    END;
+    double := FALSE; spaces := FALSE;
+    FOR i := 1 TO len - 2 DO (* search for interior " or spaces *)
+      IF name[i] = '"' THEN double := TRUE END;
+      IF name[i] <= ' ' THEN spaces := TRUE END;
+    END;
+    IF ~ double THEN (* force delimiters to be " quotes *)
+      name[0] := '"'; name[len-1] := '"'
+    END;
+    IF spaces THEN SemError(124) END;
+  END FixString;
+
+PROCEDURE MatchLiteral (sp: INTEGER);
+(* store string either as token or as literal *)
+  VAR
+    sn, sn1:  CRT.SymbolNode;
+    matchedSp: INTEGER;
+  BEGIN
+    CRT.GetSym(sp, sn);
+    CRA.MatchDFA(sn.name, sp, matchedSp);
+    IF matchedSp # CRT.noSym THEN
+      CRT.GetSym(matchedSp, sn1);
+      sn1.struct := CRT.classLitToken;
+      CRT.PutSym(matchedSp, sn1);
+      sn.struct := CRT.litToken
+    ELSE sn.struct := CRT.classToken;
+    END;
+    CRT.PutSym(sp, sn)
+  END MatchLiteral;
+
+PROCEDURE SetCtx (gp: INTEGER);
+(* set transition code to CRT.contextTrans *)
+  VAR
+    gn: CRT.GraphNode;
+  BEGIN
+    WHILE gp > 0 DO
+      CRT.GetNode(gp, gn);
+      IF (gn.typ = CRT.char) OR (gn.typ = CRT.class) THEN
+        gn.p2 := CRT.contextTrans; CRT.PutNode(gp, gn)
+      ELSIF (gn.typ = CRT.opt) OR (gn.typ = CRT.iter) THEN SetCtx(gn.p1)
+      ELSIF gn.typ = CRT.alt THEN SetCtx(gn.p1); SetCtx(gn.p2)
+      END;
+      gp := gn.next
+    END
+  END SetCtx;
+
+PROCEDURE SetOption (s: ARRAY OF CHAR);
+  VAR
+    i: CARDINAL;
+  BEGIN
+    i := 1;
+    WHILE s[i] # 0C DO
+      s[i] := CAP(s[i]);
+      IF (s[i] >= "A") AND (s[i] <= "Z") THEN CRT.ddt[s[i]] := TRUE END;
+      INC(i);
+    END;
+  END SetOption;
+
+(*--------------------------------------------------------------------*)
+
+CHARACTERS
+
+  letter   = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz_".
+  digit    = "0123456789".
+  ctrl     = CHR(1) .. CHR(31).
+  tab      = CHR(9).
+  eol      = CHR(13).
+  lf       = CHR(10).
+  noQuote1 = ANY - '"' - ctrl.
+  noQuote2 = ANY - "'" - ctrl.
+
+IGNORE tab + eol + lf
+
+TOKENS
+
+  ident     = letter {letter | digit}.
+  string    = '"' {noQuote1} '"' | "'" {noQuote2} "'".
+  badstring = '"' {noQuote1} (eol | lf) | "'" {noQuote2} (eol | lf).
+  number    = digit {digit}.
+
+PRAGMAS
+
+  Options = "$" {letter | digit} .
+                (.CRS.GetName(CRS.nextPos, CRS.nextLen, s); SetOption(s);  .)
+
+COMMENTS FROM "(*" TO "*)" NESTED
+COMMENTS FROM "/*" TO "*/"
+
+PRODUCTIONS
+
+CR                            (. VAR
+                                   startedDFA, ok, undef, hasAttrs: BOOLEAN;
+                                   unknownSy,
+                                   eofSy, gR:       INTEGER;
+                                   gramLine, sp:    INTEGER;
+                                   name, gramName:  CRT.Name;
+                                   sn:              CRT.SymbolNode; .)
+=
+"COMPILER"
+                              (. gramLine := CRS.line;
+                                 eofSy := CRT.NewSym(CRT.t, "EOF", 0);
+                                 CRT.genScanner := TRUE; CRT.ignoreCase := FALSE;
+                                 Sets.Clear(CRT.ignored);
+                                 startedDFA := FALSE; .)
+
+Ident <gramName>              (. CRT.semDeclPos.beg := CRS.nextPos .)
+{ ANY }                       (. CRT.semDeclPos.len := FileIO.INTL(CRS.nextPos - CRT.semDeclPos.beg);
+                                 CRT.semDeclPos.col := 0 .)
+{ Declaration<startedDFA> }
+SYNC
+"PRODUCTIONS"                 (. ok := Successful();
+                                 IF ok & CRT.genScanner THEN CRA.MakeDeterministic(ok) END;
+                                 IF ~ ok THEN SemError(127) END;
+                                 CRT.nNodes := 0 .)
+{ Ident <name>                (. sp := CRT.FindSym(name); undef := sp = CRT.noSym;
+                                 IF undef THEN
+                                   sp := CRT.NewSym(CRT.nt, name, CRS.line);
+                                   CRT.GetSym(sp, sn);
+                                 ELSE
+                                   CRT.GetSym(sp, sn);
+                                   IF sn.typ = CRT.nt THEN
+                                     IF sn.struct > 0 THEN SemError(107) END
+                                   ELSE SemError(108)
+                                   END;
+                                   sn.line := CRS.line
+                                 END;
+                                 hasAttrs := sn.attrPos.beg >= FileIO.Long0 .)
+  ( Attribs <sn.attrPos>      (. IF ~ undef & ~ hasAttrs THEN SemError(105) END;
+                                 CRT.PutSym(sp, sn) .)
+  |                           (. IF ~ undef & hasAttrs THEN SemError(105) END .)
+  )
+  [ SemText <sn.semPos>]
+  WEAK "="
+  Expression <sn.struct, gR>  (. CRT.CompleteGraph(gR); CRT.PutSym(sp, sn) .)
+  WEAK "."
+  }
+"END" Ident <name>            (. sp := CRT.FindSym(gramName);
+                                 IF sp = CRT.noSym THEN SemError(111);
+                                 ELSE
+                                   CRT.GetSym(sp, sn);
+                                   IF sn.attrPos.beg >= FileIO.Long0 THEN SemError(112) END;
+                                   CRT.root := CRT.NewNode(CRT.nt, sp, gramLine);
+                                 END;
+                                 IF FileIO.Compare(name, gramName) # 0 THEN
+                                   SemError(117)
+                                 END .)
+"."                           (. unknownSy := CRT.NewSym(CRT.t, "not", 0) .)
+
+.
+
+(*----------------------------------------------------------------------------*)
+
+Declaration<VAR startedDFA: BOOLEAN>
+                              (. VAR
+                                   gL1, gR1, gL2, gR2: INTEGER;
+                                   nested:             BOOLEAN; .)
+= (
+      "CHARACTERS" { SetDecl }
+    | "TOKENS"  { TokenDecl <CRT.t> }
+    | "NAMES"   { NameDecl }
+    | "PRAGMAS" { TokenDecl <CRT.pr> }
+    | "COMMENTS"
+      "FROM" TokenExpr <gL1, gR1>
+      "TO" TokenExpr <gL2, gR2>
+      ( "NESTED"              (. nested := TRUE .)
+        |                     (. nested := FALSE .)
+      )
+                              (. CRA.NewComment(gL1, gL2, nested) .)
+    | "IGNORE"
+      ( "CASE"                (. IF startedDFA THEN SemError(130) END;
+                                 CRT.ignoreCase := TRUE .)
+      | Set <CRT.ignored>     (. IF Sets.In(CRT.ignored, 0) THEN SemError(119) END; .)
+      )
+  )                           (. startedDFA := TRUE .)
+.
+
+
+(*----------------------------------------------------------------------------*)
+
+SetDecl                       (. VAR
+                                   c:    INTEGER;
+                                   set:  CRT.Set;
+                                   name: CRT.Name; .)
+= Ident <name>                (. c := CRT.ClassWithName(name);
+                                 IF c >= 0 THEN SemError(107) END .)
+  "=" Set <set>               (. IF Sets.Empty(set) THEN SemError(101) END;
+                                 c := CRT.NewClass(name, set) .)
+  ".".
+
+(*----------------------------------------------------------------------------*)
+
+Set <VAR set: CRT.Set>        (. VAR
+                                   set2: CRT.Set; .)
+= SimSet <set>
+  { "+" SimSet <set2>         (. Sets.Unite(set, set2) .)
+  | "-" SimSet <set2>         (. Sets.Differ(set, set2) .)
+  }.
+
+(*----------------------------------------------------------------------------*)
+
+SimSet <VAR set: CRT.Set>     (. VAR
+                                   i, n1, n2: CARDINAL;
+                                   c:         INTEGER;
+                                   name:      CRT.Name;
+                                   s:         ARRAY [0 .. 127] OF CHAR; .)
+=                             (. Sets.Clear(set) .)
+  (   Ident <name>            (. c := CRT.ClassWithName(name);
+                                 IF c < 0
+                                   THEN SemError(115)
+                                   ELSE CRT.GetClass(c, set)
+                                 END .)
+    | string                  (. CRS.GetName(CRS.pos, CRS.len, s);
+                                 i := 1;
+                                 WHILE s[i] # s[0] DO
+                                   IF CRT.ignoreCase THEN s[i] := CAP(s[i]) END;
+                                   Sets.Incl(set, ORD(s[i])); INC(i)
+                                 END .)
+    | SingleChar <n1>         (. Sets.Incl(set, n1) .)
+      [ ".." SingleChar <n2>  (. FOR i := n1 TO n2 DO Sets.Incl(set, i) END .)
+      ]
+    | "ANY"                   (. FOR i := 0 TO 255 DO Sets.Incl(set, i) END .)
+  ) .
+
+(*----------------------------------------------------------------------------*)
+
+SingleChar <VAR n: CARDINAL>  (. VAR
+                                   i: CARDINAL;
+                                   s: ARRAY [0 .. 127] OF CHAR; .)
+  =
+    "CHR" "("
+    (   number                (. CRS.GetName(CRS.pos, CRS.len, s);
+                                 n := 0; i := 0;
+                                 WHILE s[i] # 0C DO
+                                   n := 10 * n + ORD(s[i]) - ORD("0"); INC(i)
+                                 END;
+                                 IF n > 255 THEN SemError(118); n := n MOD 256 END;
+                                 IF CRT.ignoreCase THEN n := ORD(CAP(CHR(n))) END .)
+      | string                (. CRS.GetName(CRS.pos, CRS.len, s);
+                                 IF CRS.len # 3 THEN SemError(118) END;
+                                 IF CRT.ignoreCase THEN s[1] := CAP(s[1]) END;
+                                 n := ORD(s[1]); .)
+     )
+     ")" .
+
+(*----------------------------------------------------------------------------*)
+
+TokenDecl <typ: INTEGER>      (. VAR
+                                   kind:       INTEGER;
+                                   name:       CRT.Name;
+                                   pos:        CRT.Position;
+                                   sp, gL, gR: INTEGER;
+                                   sn:         CRT.SymbolNode; .)
+= Symbol <name, kind>         (. IF CRT.FindSym(name) # CRT.noSym THEN SemError(107)
+                                 ELSE
+                                   sp := CRT.NewSym(typ, name, CRS.line);
+                                   CRT.GetSym(sp, sn); sn.struct := CRT.classToken;
+                                   CRT.PutSym(sp, sn)
+                                 END .)
+  SYNC
+  ( "="
+    TokenExpr <gL, gR>        (. IF kind # ident THEN SemError(113) END;
+                                 CRT.CompleteGraph(gR);
+                                 CRA.ConvertToStates(gL, sp) .)
+    "."
+  |                           (. IF kind = ident THEN CRT.genScanner := FALSE
+                                   ELSE MatchLiteral(sp)
+                                 END .)
+  )
+  [ SemText <pos>             (. IF typ = CRT.t THEN SemError(114) END;
+                                 CRT.GetSym(sp, sn); sn.semPos := pos;
+                                 CRT.PutSym(sp, sn) .)
+  ].
+
+(*----------------------------------------------------------------------------*)
+
+Expression <VAR gL, gR: INTEGER>
+                              (. VAR
+                                   gL2, gR2: INTEGER;
+                                   first:    BOOLEAN; .)
+= Term <gL, gR>               (. first := TRUE .)
+  { WEAK "|"
+    Term <gL2, gR2>           (. IF first THEN
+                                   CRT.MakeFirstAlt(gL, gR); first := FALSE
+                                 END;
+                                 CRT.ConcatAlt(gL, gR, gL2, gR2) .)
+  }
+.
+
+(*----------------------------------------------------------------------------*)
+
+Term<VAR gL, gR: INTEGER>     (. VAR
+                                   gL2, gR2: INTEGER; .)
+=                             (. gL := 0; gR := 0 .)
+( Factor <gL, gR>
+    { Factor <gL2, gR2>       (. CRT.ConcatSeq(gL, gR, gL2, gR2) .)
+    }
+  |                           (. gL := CRT.NewNode(CRT.eps, 0, 0); gR := gL .)
+  ).
+
+(*----------------------------------------------------------------------------*)
+
+Factor <VAR gL, gR: INTEGER>  (. VAR
+                                   sp, kind:    INTEGER;
+                                   name:        CRT.Name;
+                                   gn:          CRT.GraphNode;
+                                   sn:          CRT.SymbolNode;
+                                   set:         CRT.Set;
+                                   undef, weak: BOOLEAN;
+                                   pos:         CRT.Position; .)
+=                             (. gL :=0; gR := 0; weak := FALSE .)
+( [ "WEAK"                    (. weak := TRUE .)
+  ]
+  Symbol <name, kind>         (. sp := CRT.FindSym(name); undef := sp = CRT.noSym;
+                                 IF undef THEN
+                                   IF kind = ident THEN  (* forward nt *)
+                                     sp := CRT.NewSym(CRT.nt, name, 0)
+                                   ELSIF CRT.genScanner THEN
+                                     sp := CRT.NewSym(CRT.t, name, CRS.line);
+                                     MatchLiteral(sp)
+                                   ELSE (* undefined string in production *)
+                                     SemError(106); sp := 0
+                                   END
+                                 END;
+                                 CRT.GetSym(sp, sn);
+                                 IF (sn.typ # CRT.t) & (sn.typ # CRT.nt) THEN SemError(104) END;
+                                 IF weak THEN
+                                   IF sn.typ = CRT.t THEN sn.typ := CRT.wt
+                                   ELSE SemError(123)
+                                   END
+                                 END;
+                                 gL := CRT.NewNode(sn.typ, sp, CRS.line); gR := gL .)
+  ( Attribs <pos>             (. CRT.GetNode(gL, gn); gn.pos := pos;
+                                 CRT.PutNode(gL, gn);
+                                 CRT.GetSym(sp, sn);
+                                 IF sn.typ # CRT.nt THEN SemError(103) END;
+                                 IF undef THEN
+                                   sn.attrPos := pos; CRT.PutSym(sp, sn)
+                                 ELSIF sn.attrPos.beg < FileIO.Long0 THEN SemError(105)
+                                 END .)
+  |                           (. CRT.GetSym(sp, sn);
+                                 IF sn.attrPos.beg >= FileIO.Long0 THEN SemError(105) END .)
+  )
+| "(" Expression <gL, gR> ")"
+| "[" Expression <gL, gR> "]" (. CRT.MakeOption(gL, gR) .)
+| "{" Expression <gL, gR> "}" (. CRT.MakeIteration(gL, gR) .)
+
+| SemText <pos>               (. gL := CRT.NewNode(CRT.sem, 0, 0); gR := gL;
+                                 CRT.GetNode(gL, gn);
+                                 gn.pos := pos;
+                                 CRT.PutNode(gL, gn) .)
+| "ANY"                       (. Sets.Fill(set); Sets.Excl(set, CRT.eofSy);
+                                 gL := CRT.NewNode(CRT.any, CRT.NewSet(set), 0); gR := gL .)
+| "SYNC"                      (. gL := CRT.NewNode(CRT.sync, 0, 0); gR := gL .)
+).
+
+(*----------------------------------------------------------------------------*)
+
+TokenExpr <VAR gL, gR: INTEGER>
+                              (. VAR
+                                   gL2, gR2: INTEGER;
+                                   first:    BOOLEAN; .)
+= TokenTerm <gL, gR>          (. first := TRUE .)
+  { WEAK "|"
+    TokenTerm <gL2, gR2>      (. IF first THEN
+                                   CRT.MakeFirstAlt(gL, gR); first := FALSE
+                                 END;
+                                 CRT.ConcatAlt(gL, gR, gL2, gR2) .)
+  }.
+
+(*----------------------------------------------------------------------------*)
+
+TokenTerm <VAR gL, gR: INTEGER>
+                              (. VAR
+                                   gL2, gR2: INTEGER; .)
+= TokenFactor <gL, gR>
+  { TokenFactor <gL2, gR2>    (. CRT.ConcatSeq(gL, gR, gL2, gR2) .)
+  }
+  [ "CONTEXT"
+    "(" TokenExpr <gL2, gR2>  (. SetCtx(gL2); CRT.ConcatSeq(gL, gR, gL2, gR2) .)
+    ")"
+  ].
+
+(*----------------------------------------------------------------------------*)
+
+TokenFactor <VAR gL, gR: INTEGER>
+                              (.VAR
+                                  kind, c: INTEGER;
+                                  set:     CRT.Set;
+                                  name:    CRT.Name; .)
+=                             (. gL :=0; gR := 0 .)
+( Symbol <name, kind>         (. IF kind = ident THEN
+                                   c := CRT.ClassWithName(name);
+                                   IF c < 0 THEN
+                                     SemError(115);
+                                     Sets.Clear(set); c := CRT.NewClass(name, set)
+                                   END;
+                                   gL := CRT.NewNode(CRT.class, c, 0); gR := gL
+                                 ELSE (* string *)
+                                   CRT.StrToGraph(name, gL, gR)
+                                 END .)
+| "(" TokenExpr <gL, gR> ")"
+| "[" TokenExpr <gL, gR> "]"  (. CRT.MakeOption(gL, gR) .)
+| "{" TokenExpr <gL, gR> "}"  (. CRT.MakeIteration(gL, gR) .)
+).
+
+(*----------------------------------------------------------------------------*)
+
+Ident <VAR name: CRT.Name> =
+  ident                       (. CRS.GetName(CRS.pos, CRS.len, name) .).
+
+(*----------------------------------------------------------------------------*)
+
+Symbol <VAR name: CRT.Name; VAR kind: INTEGER>
+  =
+  ( Ident <name>              (. kind := ident .)
+  | string                    (. CRS.GetName(CRS.pos, CRS.len, name); kind := string;
+                                 FixString(name, CRS.len) .)
+  ).
+
+(*----------------------------------------------------------------------------*)
+
+Attribs <VAR attrPos: CRT.Position> =
+    "<"                       (. attrPos.beg := CRS.pos + FileIO.Long1; attrPos.col := CRS.col + 1 .)
+    { ANY | badstring         (. SemError(102) .)
+    }
+    ">"                       (. attrPos.len := FileIO.INTL(CRS.pos - attrPos.beg) .)
+  |
+    "<."                      (. attrPos.beg := CRS.pos + FileIO.Long2; attrPos.col := CRS.col + 2 .)
+    { ANY | badstring         (. SemError(102) .)
+    }
+    ".>"                      (. attrPos.len := FileIO.INTL(CRS.pos - attrPos.beg) .).
+
+(*----------------------------------------------------------------------------*)
+
+SemText <VAR semPos: CRT.Position> =
+  "(."                        (. semPos.beg := CRS.pos + FileIO.Long2; semPos.col := CRS.col + 2 .)
+  {   ANY
+    | badstring               (. SemError(102) .)
+    | "(."                    (. SemError(109) .)
+  }
+  ".)"                        (. IF CRS.pos - semPos.beg > FileIO.INT(CRT.maxSemLen) THEN SemError(128) END;
+                                 semPos.len := FileIO.ORDL(CRS.pos - semPos.beg) .).
+
+(*----------------------------------------------------------------------------*)
+
+NameDecl                      (. VAR
+                                   name, str: CRT.Name; .)
+  = Ident <name> "="
+    ( ident                   (. CRS.GetName(CRS.pos, CRS.len, str) .)
+      | string                (. CRS.GetName(CRS.pos, CRS.len, str);
+                                 FixString(str, CRS.len) .)
+       )                      (. CRT.NewName(name, str) .)
+  ".".
+
+(*----------------------------------------------------------------------------*)
+
+END CR.

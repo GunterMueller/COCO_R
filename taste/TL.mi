@@ -1,0 +1,71 @@
+IMPLEMENTATION MODULE TL;
+
+IMPORT TasteP, FileIO, Storage, SYSTEM;
+
+VAR
+  topScope: Object;    (* topmost procedure scope *)
+
+PROCEDURE EnterScope;
+  VAR
+    scope: Object;
+  BEGIN
+    Storage.ALLOCATE(scope, SYSTEM.TSIZE(Objectnode));
+    WITH scope^ DO
+      name := ""; type := undef; kind := scopes; locals := NIL; nextAdr := 3
+    END;
+    scope^.next := topScope; topScope := scope; INC(curLevel);
+  END EnterScope;
+
+PROCEDURE LeaveScope;
+  BEGIN
+    topScope := topScope^.next; DEC(curLevel)
+  END LeaveScope;
+
+PROCEDURE DataSpace (): INTEGER;
+  BEGIN
+    RETURN topScope^.nextAdr - 3
+  END DataSpace;
+
+PROCEDURE NewObj (name: ARRAY OF CHAR; kind: INTEGER): Object;
+  VAR
+    obj, p: Object;
+  BEGIN
+    Storage.ALLOCATE(obj, SYSTEM.TSIZE(Objectnode));
+    FileIO.Assign(name, obj^.name); obj^.type := undef; obj^.kind := kind;
+    obj^.level := curLevel;
+    p := topScope^.locals;
+    WHILE p # NIL DO
+      IF FileIO.Compare(p^.name, name) = 0 THEN TasteP.SemError(117) END;
+      p := p^.next
+    END;
+    obj^.next := topScope^.locals; topScope^.locals := obj;
+    IF kind = vars THEN
+      obj^.adr := topScope^.nextAdr; INC(topScope^.nextAdr)
+    END;
+    RETURN obj
+  END NewObj;
+
+PROCEDURE Obj(name: ARRAY OF CHAR): Object;
+  VAR
+    obj, scope: Object;
+  BEGIN
+    scope := topScope;
+    WHILE scope # NIL DO
+      obj := scope^.locals;
+      WHILE obj # NIL DO
+        IF FileIO.Compare(obj^.name, name) = 0 THEN RETURN obj END;
+        obj := obj^.next
+      END;
+      scope := scope^.next
+    END;
+    TasteP.SemError(118); RETURN undefObj
+  END Obj;
+
+BEGIN
+  topScope := NIL; curLevel := 0;
+  Storage.ALLOCATE(undefObj, SYSTEM.TSIZE(Objectnode));
+  WITH undefObj^ DO
+    name := ""; type := undef; kind := vars;
+    adr := 0; level := 0; next := NIL
+  END
+END TL.

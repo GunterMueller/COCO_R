@@ -1,0 +1,85 @@
+$LS (*ACFGILMOSX*)
+(* COCO/R for MS-DOS grammar stripped of semantic attributes
+   as adapted by P.D. Terry, January 1992 *)
+
+COMPILER CR
+
+CHARACTERS
+
+  letter   = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz_".
+  digit    = "0123456789".
+  ctrl     = CHR(1) .. CHR(31).
+  tab      = CHR(9).
+  eol      = CHR(13).
+  lf       = CHR(10).
+  noQuote1 = ANY - '"' - ctrl.
+  noQuote2 = ANY - "'" - ctrl.
+
+IGNORE tab + eol + lf
+
+TOKENS
+
+  ident   = letter {letter | digit} .
+  string  = '"' {noQuote1} '"' | "'" {noQuote2} "'" .
+  number  = digit {digit} .
+
+PRAGMAS
+
+  Options = "$" {letter} .
+
+COMMENTS FROM "(*" TO "*)" NESTED
+COMMENTS FROM "/*" TO "*/"
+
+PRODUCTIONS
+
+CR = "COMPILER" Ident { ANY } { Declaration }
+     SYNC "PRODUCTIONS"
+     { Ident ( Attribs | ) [ SemText ] WEAK "=" Expression WEAK "." }
+     "END" Ident "." .
+
+Declaration =
+      "CHARACTERS" { SetDecl }
+    | "TOKENS"     { TokenDecl }
+    | "NAMES"      { NameDecl }
+    | "PRAGMAS"    { TokenDecl }
+    | "COMMENTS" "FROM" TokenExpr "TO" TokenExpr ( "NESTED" | )
+    | "IGNORE" ( "CASE" | Set ) .
+
+SetDecl = Ident "=" Set "." .
+
+Set = SimSet { "+" SimSet | "-" SimSet } .
+
+SimSet = Ident | string | SingleChar [ ".." SingleChar ] | "ANY" .
+
+SingleChar = "CHR" "(" ( number | string ) ")" .
+
+TokenDecl = Symbol SYNC ( "=" TokenExpr "." | ) [ SemText ] .
+
+Expression = Term { WEAK "|" Term } .
+
+Term = ( Factor { Factor } | ) .
+
+Factor = ( [ "WEAK" ] Symbol ( Attribs | )
+           | "(" Expression ")"
+           | "[" Expression "]"
+           | "{" Expression "}"
+           | SemText | "ANY" | "SYNC" ) .
+
+TokenExpr = TokenTerm { WEAK "|" TokenTerm } .
+
+TokenTerm = TokenFactor { TokenFactor } [ "CONTEXT" "(" TokenExpr ")" ] .
+
+TokenFactor = ( Symbol | "(" TokenExpr ")" | "[" TokenExpr "]"
+                | "{" TokenExpr "}" ) .
+
+Ident = ident .
+
+Symbol = ( Ident | string ) .
+
+Attribs = "<" { ANY } ">" .
+
+SemText = "(." { ANY } ".)" .
+
+NameDecl = Ident  "=" ( ident | string ) "." .
+
+END CR.

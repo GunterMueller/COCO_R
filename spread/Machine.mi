@@ -1,0 +1,163 @@
+IMPLEMENTATION MODULE Machine;
+(* Simple stack based interpreter for a spreadsheet
+   P.D. Terry, Rhodes University, 1995 *)
+
+  IMPORT FileIO, Terminal (* for screen addressing *);
+
+(* From Definition Module +++++++++++++
+
+  CONST
+    Push     = 0;  (* Opcodes *)
+    Load     = 1;
+    Negate   = 2;
+    Add      = 3;
+    Subtract = 4;
+    Multiply = 5;
+    Divide   = 6;
+    Modulus  = 7;
+    Halt     = 8;
+
+   ++++++++++++++++++++++++++++++++++++ *)
+
+  (* The following two procedures asssume further library support *)
+
+  PROCEDURE GotoXY (Col, Line : CARDINAL);
+    BEGIN
+      Terminal.GotoXY(Col, Line)
+    END GotoXY;
+
+  PROCEDURE ClrScreen;
+    BEGIN
+      Terminal.ClrScreen
+    END ClrScreen;
+
+  CONST
+    MaxMem   = 50;
+  TYPE
+    ADDRESS = CARDINAL [0 .. MaxMem];
+    CELLS   = RECORD;
+                Defined  : BOOLEAN;
+                Value    : INTEGER;
+                LastCode : CARDINAL;
+                Code     : ARRAY ADDRESS OF INTEGER;
+              END;
+  VAR
+    SpreadSheet : ARRAY ROWS, COLUMNS OF CELLS;
+
+  PROCEDURE Evaluate (Row : ROWS; Col : COLUMNS; VAR Okay : BOOLEAN);
+  (* This has no error checking for going out of the bounds of code.
+     Of course, it should have done *)
+
+    VAR
+      Stack : ARRAY ADDRESS OF INTEGER;
+      PC, Top   : ADDRESS;
+      I : CARDINAL;
+    BEGIN
+
+(* +++++++++++++++++++++ start of debugging code +++++++++
+   Okay, I'll 'fess up.  For debugging during development I added this so that
+   I could make sure the code generated was okay
+
+      GotoXY(0, 15);
+      FileIO.WriteCard(FileIO.con, Row, 0);
+      FileIO.WriteCard(FileIO.con, Col, 0);
+      GotoXY(0, 16);
+      FOR I := 0 TO 10 DO
+        FileIO.WriteCard(FileIO.con, SpreadSheet[Row, Col].Code[I], 0);
+      END;
+
+ +++++++++++++++++++++++ end of debugging code +++++++++++ *)
+
+      Top := 0; Stack[Top] := 0;
+      PC := 0; Okay := TRUE;
+      WITH SpreadSheet[Row, Col] DO
+        WHILE (Code[PC] # Halt) AND Okay DO
+          CASE Code[PC] OF
+              Push :
+                INC(Top);
+                Stack[Top] := Code[PC+1]; INC(PC);
+            | Load :
+                INC(Top);
+                Stack[Top] := SpreadSheet[Code[PC+1], Code[PC+2]].Value;
+                INC(PC, 2)
+            | Negate :
+                Stack[Top] := - Stack[Top];
+            | Add :
+                DEC(Top); Stack[Top] := Stack[Top] + Stack[Top+1]
+            | Subtract :
+                DEC(Top); Stack[Top] := Stack[Top] - Stack[Top+1]
+            | Multiply :
+                DEC(Top); Stack[Top] := Stack[Top] * Stack[Top+1]
+            | Divide :
+                Okay := Stack[Top] # 0; DEC(Top);
+                IF Okay
+                  THEN Stack[Top] := Stack[Top] DIV Stack[Top+1]
+                  ELSE Stack[Top] := MAX(INTEGER)
+                END
+            | Modulus :
+                Okay := Stack[Top] # 0; DEC(Top);
+                IF Okay
+                  THEN Stack[Top] := Stack[Top] MOD Stack[Top+1]
+                  ELSE Stack[Top] := 0
+                END
+            ELSE Okay := FALSE (* unexpected opcode *)
+          END;
+          INC(PC)
+        END;
+        IF Top # 1 THEN Okay := FALSE END (* this should never happen! *);
+        Value := Stack[Top]
+      END
+    END Evaluate;
+
+  PROCEDURE InitializeCode (Row : ROWS; Col : COLUMNS);
+    VAR
+      I : ADDRESS;
+    BEGIN
+      SpreadSheet[Row, Col].LastCode := 0;
+      SpreadSheet[Row, Col].Defined := TRUE;
+      FOR I := 0 TO MAX(ADDRESS) DO
+        (* safety belt feature - make sure there is a halt there *)
+        SpreadSheet[Row, Col].Code[I] := Halt
+      END;
+    END InitializeCode;
+
+  PROCEDURE AddCode (Row : ROWS; Col : COLUMNS; Word : INTEGER);
+    BEGIN
+      WITH SpreadSheet[Row, Col] DO
+        Code[LastCode] := Word;
+        INC(LastCode);
+      END
+    END AddCode;
+
+  PROCEDURE Refresh;
+    VAR
+      Row  : ROWS;
+      Col  : COLUMNS;
+      Okay : BOOLEAN;
+    BEGIN
+      FOR Row := 1 TO MaxRows DO
+        FOR Col := 1 TO MaxCols DO
+          IF SpreadSheet[Row, Col].Defined THEN
+            Evaluate(Row, Col, Okay);
+            (* we should really react to NOT Okay of course! *)
+            GotoXY(10 * (Col - 1), Row - 1);
+            FileIO.WriteInt(FileIO.con, SpreadSheet[Row, Col].Value, 10);
+          END
+        END
+      END
+    END Refresh;
+
+  VAR
+    I : ROWS;
+    J : COLUMNS;
+
+  BEGIN (* overall initialization *)
+    ClrScreen;
+    FOR I := 1 TO MaxRows DO
+      FOR J := 1 TO MaxCols DO
+        SpreadSheet[I, J].Defined := FALSE;
+        SpreadSheet[I, J].Value := 0;
+        SpreadSheet[I, J].LastCode := 0;
+      END
+    END
+  END Machine.

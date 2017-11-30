@@ -1,0 +1,63 @@
+MODULE Convert;
+(* Convert textfiles from one form to another
+   P.D. Terry, Rhodes University, 1994 *)
+  IMPORT FileIO;
+  TYPE
+    MODES = (dos2unix, dos2mac, mac2dos, mac2unix, unix2dos, unix2mac);
+  VAR
+    Old, New, param : ARRAY [0 .. 90] OF CHAR;
+    in, out : FileIO.File;
+    ch : CHAR;
+    Mode : MODES;
+    n : CARDINAL;
+  BEGIN
+    FileIO.NextParameter(Old);
+    FileIO.NextParameter(New);
+    IF (Old[0] = 0C) OR (New[0] = 0C) THEN
+      FileIO.WriteString(FileIO.con, "Usage : CONVERT OldFile NewFile [n]");
+      FileIO.WriteLn(FileIO.con);
+      FileIO.WriteString(FileIO.con,
+        "n = 1) dos2unix 2) dos2mac 3) mac2dos 4) mac2unix 5) unix2dos 6) unix2mac ");
+      RETURN
+    END;
+    FileIO.Open(in, Old, FALSE);
+    IF ~ FileIO.Okay THEN
+      FileIO.WriteString(FileIO.con, "File <");
+      FileIO.WriteString(FileIO.con, Old);
+      FileIO.WriteString(FileIO.con, "> not found");
+      FileIO.WriteLn(FileIO.con); RETURN
+    END;
+
+    FileIO.Open(out, New, TRUE);
+    IF ~ FileIO.Okay THEN
+      FileIO.WriteString(FileIO.con, "File <");
+      FileIO.WriteString(FileIO.con, New);
+      FileIO.WriteString(FileIO.con, "> not opened");
+      FileIO.WriteLn(FileIO.con); RETURN
+    END;
+
+    FileIO.NextParameter(param); ch := param[0];
+    IF (ch < '1') OR (ch > '6') THEN
+      FileIO.WriteString(FileIO.con,
+        "1) dos2unix 2) dos2mac 3) mac2dos 4) mac2unix 5) unix2dos 6) unix2mac ? ");
+      REPEAT FileIO.Read(FileIO.con, ch) UNTIL (ch >= '1') AND (ch <= '6');
+    END;
+    Mode := VAL(MODES, ORD(ch) - 49); n := 1;
+    LOOP
+      FileIO.ReadBytes(in, ch, n);
+      IF (n = 0) OR (FileIO.EndOfFile(in)) THEN EXIT END;
+      CASE ch OF
+        FileIO.CR, FileIO.LF :
+          IF (Mode < mac2dos) AND (ch = FileIO.CR) THEN FileIO.Read(in, ch) END;
+          CASE Mode OF
+            dos2unix, mac2unix : FileIO.Write(out, FileIO.LF)
+          | dos2mac, unix2mac  : FileIO.Write(out, FileIO.CR)
+          ELSE  FileIO.Write(out, FileIO.CR);  FileIO.Write(out, FileIO.LF);
+          END;
+        ELSE FileIO.Write(out, ch)
+      END
+    END;
+    FileIO.Close(in); FileIO.Close(out)
+  END Convert.
+
+
